@@ -16,6 +16,6 @@ public class Brand {
     @Column(name = "id")
     private Integer id;
 
-    @Column(name = "name", length = 50)
+    @Column(name = "name", length = 50, nullable = false)
     private String name;
 }
