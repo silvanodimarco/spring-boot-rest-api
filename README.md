@@ -2,6 +2,9 @@
 ## Table of Contents
 - [Overview ](#Overview)
 - [Installation](#Installation)
+- [Domain](#Domain)
+  - Database
+  - Associations
 - [Design Patterns and Other Solutions](#Design-Patterns-and-Other-Solutions)
   - [DTO](#DTO)
   - [Builder](#Builder)
@@ -25,6 +28,9 @@ in this README, I focus on detailing the implementation rather than discussing t
 > unintentional exposure of local credentials, the `application.properties` file is intentionally 
 > left empty.
 
+
+## Domain
+https://softwareengineering.stackexchange.com/questions/359592/what-is-a-domain
 
 ## Design Patterns and Other Solutions
 ### DTO
@@ -94,6 +100,84 @@ You can also define more specific access methods in the interface, and there are
 In the `BrandRepository.java` interface, I declared a `findByName` method, which returns a `Brand` object and expects a `String` as a parameter.
 Spring Data JPA automatically handles the implementation of this method
 allowing me to easily utilize it in other parts of the code, such as in the `createBrand` method of the `BrandService.java` class. 
+- Native Query: Native queries are simply SQL queries. Using native queries allow us to unleash the full power of our database, as we can use proprietary features not available in JPQL-restricted syntax.
+This comes at the cost of losing database portability of our application because our JPA provider can’t abstract specific details from the database implementation or vendor anymore.
+As this project is a practice exercise focused on learning through practical implementation, I aimed to explore all the different ways of defining custom methods within the repository. Thus, within the `ProductRepository.java` interface,
+I introduced the `getProductsFilteredByName` method. This method retrieves its data from a native query specified by the `@Query` annotation preceding it. Subsequently, I used this method in the `ProductService.java` layer treating it like any other repository method.
+```java
+public interface ProductRepository extends JpaRepository<Product, Integer> { 
+    ...
+    @Query(value = "SELECT * FROM product p WHERE p.name LIKE %:name%", nativeQuery = true)
+    List<Product> getProductsFilteredByName(
+        @Param("name") String name
+    );
+}
+```
+
+Spring Data JPA also provides Specifications which are a way to build complex, dynamic queries for the JPA Repositories.
+Some of the advantages of using Spring Data JPA Specifications are:
+- Specifications allow you to build complex queries dynamically at runtime. This is especially useful when you have a set of search criteria that can change based on user input or other runtime conditions.
+- You can encapsulate query criteria as reusable Specification objects. This promotes code reusability and maintainability, as you can easily use the same criteria in multiple places within the application.
+- By avoiding string-based queries, you reduce the risk of SQL injection attacks, as Specifications use parameterized queries by default.
+- Spring Data JPA can optimize queries generated from Specifications to minimize database round-trips and improve performance.
+
+To utilize Spring Data JPA Specifications, the initial step involves creating a specification class. In this project, I generated the class named `ReviewSpecification` within the `/persistance/repository` directory. Afterwards, I defined the
+methods `filterByRatingAndOrActive` and `isFromProductWithNameLike`, both returning `Specification<Review>`. In these methods, I dynamically constructed the query based on the parameters using predicates with the `criteriaBuilder`. 
+```java
+public class ReviewSpecification {
+    public static Specification<Review> filterByRatingAndOrActive(Integer rating, Boolean active) {
+        return (root, query, criteriaBuilder) -> {
+            Predicate ratingPredicate = rating != null ? criteriaBuilder.greaterThanOrEqualTo(root.get("rating"), rating) : null;
+            Predicate activePredicate = active != null ? criteriaBuilder.equal(root.get("active"), active) : null;
+
+            List<Predicate> predicates = new ArrayList<>();
+
+            if(ratingPredicate != null) {
+                predicates.add(ratingPredicate);
+            }
+            if(activePredicate != null) {
+                predicates.add(activePredicate);
+            }
+
+            return criteriaBuilder.and(predicates.toArray(new Predicate[predicates.size()]));
+        };
+    }
+
+    public static Specification<Review> isFromProductWithNameLike(String productName) {
+        return (root, query, criteriaBuilder) -> {
+            Join<Review, Product> reviewsProduct = root.join("product");
+            return criteriaBuilder.like(reviewsProduct.get("name"),
+                productName != null ? likePattern(productName) : likePattern(""));
+        };
+    }
+  ...
+}
+```
+In addition, I added a new method called `findAll` to the `ReviewRepository` class. This method accepts a parameter of type `Specification<Review>`.
+To enable this functionality, the `ReviewRepository` class must now also extend `JpaSpecificationExecutor<Review>`.
+```java
+public interface ReviewRepository extends JpaRepository<Review, Integer>, JpaSpecificationExecutor<Review> {
+  List<Review> findAll(Specification<Review> specification);
+}
+```
+Then, within the `getAllReviews` method of the `ReviewService` class, I instantiate both specifications with their respective parameters. In case it is necessary, I can create a new specification dynamically by combining them using the `.and` method.
+To conclude, I call the `findAll` method, passing either a single specification or the combined one as a parameter, and Spring Data JPA handles the rest.
+```java
+public List<ReviewResponseDto> getAllReviews(Integer rating, Boolean active, String productName) {
+        final Specification<Review> filterByRatingAndOrActive = ReviewSpecification.filterByRatingAndOrActive(rating, active);
+        final Specification<Review> isFromProductWithNameLike = ReviewSpecification.isFromProductWithNameLike(productName);
+        Specification<Review> specification;
+
+        if(rating != null || active != null) {
+            specification = filterByRatingAndOrActive.and(isFromProductWithNameLike);
+        } else {
+            specification = isFromProductWithNameLike;
+        }
+
+        List<Review> reviews = reviewRepository.findAll(specification);
+        ...
+}
+```
 
 ### Lombok
 Lombok is a Java library that helps developers reduce boilerplate code in their projects by providing annotations to generate common code constructs automatically during compilation. It aims to simplify Java development by automating
