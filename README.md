@@ -2,9 +2,6 @@
 ## Table of Contents
 - [Overview ](#Overview)
 - [Installation](#Installation)
-- [Domain](#Domain)
-  - Database
-  - Associations
 - [Design Patterns and Other Solutions](#Design-Patterns-and-Other-Solutions)
   - [DTO](#DTO)
   - [Builder](#Builder)
@@ -27,10 +24,6 @@ in this README, I focus on detailing the implementation rather than discussing t
 > and test the application effortlessly. For the time being, to maintain security and avoid 
 > unintentional exposure of local credentials, the `application.properties` file is intentionally 
 > left empty.
-
-
-## Domain
-https://softwareengineering.stackexchange.com/questions/359592/what-is-a-domain
 
 ## Design Patterns and Other Solutions
 ### DTO
